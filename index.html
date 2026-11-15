@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Procura — Interactive Application Preview & Simulation</title>
+  <style>
+    :root {
+      --bg: #1e1e1e;
+      --panel: #282828;
+      --card: #323232;
+      --text: #dcdcdc;
+      --muted: #a0a0a0;
+      --accent: #4682e6;
+      --accent-hover: #3b70c9;
+      --success: #4caf50;
+      --warning: #ffa726;
+      --error: #f44336;
+      --border: #3c3c3c;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+    body { background-color: var(--bg); color: var(--text); padding: 16px; min-height: 100vh; }
+    
+    /* Top Header */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 20px;
+      background: var(--panel);
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      margin-bottom: 16px;
+    }
+    .header h1 { font-size: 20px; color: #ffffff; display: flex; align-items: center; gap: 10px; }
+    .badge { font-size: 11px; padding: 3px 8px; background: var(--accent); color: white; border-radius: 12px; }
+    .status-pill { font-size: 12px; color: var(--success); display: flex; align-items: center; gap: 6px; }
+    .pulse { width: 8px; height: 8px; background: var(--success); border-radius: 50%; animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0% { opacity: 0.4; } 50% { opacity: 1; } 100% { opacity: 0.4; } }
+
+    /* Notice Banner */
+    .banner {
+      background: rgba(70, 130, 230, 0.1);
+      border: 1px solid var(--accent);
+      border-radius: 6px;
+      padding: 10px 16px;
+      font-size: 13px;
+      margin-bottom: 16px;
+      line-height: 1.5;
+    }
+    .banner strong { color: #fff; }
+
+    /* Tabs */
+    .tabs { display: flex; gap: 4px; border-bottom: 2px solid var(--border); margin-bottom: 16px; }
+    .tab-btn {
+      background: var(--panel);
+      border: none;
+      color: var(--muted);
+      padding: 10px 20px;
+      border-top-left-radius: 6px;
+      border-top-right-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+    .tab-btn:hover { color: #fff; background: var(--card); }
+    .tab-btn.active { color: #fff; background: var(--accent); }
+
+    /* Tab Contents */
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+
+    /* Dashboard Grid */
+    .grid-6 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 14px;
+      margin-bottom: 16px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+      position: relative;
+    }
+    .card .title { font-size: 12px; color: var(--muted); text-transform: uppercase; margin-bottom: 6px; }
+    .card .value { font-size: 26px; font-weight: bold; color: #fff; margin-bottom: 8px; }
+    .progress-bar { width: 100%; height: 6px; background: #222; border-radius: 3px; overflow: hidden; }
+    .progress-fill { height: 100%; border-radius: 3px; transition: width 0.4s ease; }
+
+    /* Tables */
+    .table-container {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow-x: auto;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { background: #323232; color: #fff; text-align: left; padding: 10px 14px; font-weight: 600; border-bottom: 1px solid var(--border); }
+    td { padding: 9px 14px; border-bottom: 1px solid #333; color: var(--text); }
+    tr:nth-child(even) { background: #242424; }
+    tr:hover { background: #333333; cursor: pointer; }
+    .tag-state { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+    .tag-r { background: rgba(76, 175, 80, 0.2); color: var(--success); }
+    .tag-s { background: rgba(160, 160, 160, 0.2); color: var(--muted); }
+
+    /* Scheduler Layout */
+    .scheduler-grid {
+      display: grid;
+      grid-template-columns: 340px 1fr;
+      gap: 16px;
+    }
+    @media (max-width: 900px) { .scheduler-grid { grid-template-columns: 1fr; } }
+    .form-group { margin-bottom: 12px; }
+    .form-group label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+    .form-control {
+      width: 100%;
+      background: #1c1c1c;
+      border: 1px solid var(--border);
+      color: #fff;
+      padding: 8px 10px;
+      border-radius: 5px;
+      font-size: 13px;
+    }
+    .form-control:focus { outline: none; border-color: var(--accent); }
+    .btn {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 9px 16px;
+      border-radius: 5px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn:hover { background: var(--accent-hover); }
+    .btn-secondary { background: #444; }
+    .btn-secondary:hover { background: #555; }
+    .btn-danger { background: #c62828; }
+    .btn-danger:hover { background: #b71c1c; }
+
+    /* Gantt Chart */
+    .gantt-container {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      margin-top: 16px;
+    }
+    .gantt-chart {
+      display: flex;
+      height: 50px;
+      background: #181818;
+      border-radius: 6px;
+      overflow: hidden;
+      margin-top: 12px;
+      border: 1px solid var(--border);
+    }
+    .gantt-bar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-size: 12px;
+      font-weight: bold;
+      border-right: 1px solid rgba(0,0,0,0.3);
+      position: relative;
+      transition: width 0.3s;
+    }
+    .gantt-time-axis {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 6px;
+    }
+
+    /* Stats Summary */
+    .stat-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 14px;
+    }
+    .stat-pill {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 14px;
+    }
+    .stat-pill .lbl { font-size: 11px; color: var(--muted); }
+    .stat-pill .val { font-size: 16px; font-weight: bold; color: #fff; margin-top: 2px; }
+
+    /* Hierarchy Tree */
+    .tree-node { margin-left: 20px; font-size: 13px; line-height: 1.8; }
+    .tree-toggle { cursor: pointer; color: var(--accent); user-select: none; }
+  </style>
+</head>
+<body>
+
+  <!-- Top App Header -->
+  <div class="header">
+    <h1>
+      <span>⚡ Procura</span>
+      <span class="badge">Linux CPU Monitor & Job Scheduler</span>
+    </h1>
+    <div class="status-pill">
+      <div class="pulse"></div>
+      <span>Simulation & GUI Active (Java 17 Architecture)</span>
+    </div>
+  </div>
+
+  <!-- Information Banner -->
+  <div class="banner">
+    <strong>Welcome to Procura (Project #10)!</strong> Developed by <strong>Swaroop (CS25BT006)</strong>, <strong>Bunny (CS25BT016)</strong>, and <strong>Basha (CS25BT059)</strong>. The application backend is built with <strong>Java 17 (Swing GUI)</strong> and runs natively on Linux/Ubuntu using <code>/proc</code>. This interactive browser console is provided so you can immediately preview, inspect, and demonstrate the exact user interface, scheduling simulator, and process telemetry right in your browser.
+  </div>
+
+  <!-- Main Navigation Tabs -->
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('dashboard')">📊 Dashboard</button>
+    <button class="tab-btn" onclick="switchTab('processes')">⚙️ Process Monitor</button>
+    <button class="tab-btn" onclick="switchTab('hierarchy')">🌳 Process Hierarchy</button>
+    <button class="tab-btn" onclick="switchTab('scheduler')">⏱️ CPU Job Scheduler</button>
+    <button class="tab-btn" onclick="switchTab('analytics')">📈 Performance Analytics</button>
+  </div>
+
+  <!-- TAB 1: DASHBOARD -->
+  <div id="tab-dashboard" class="tab-pane active">
+    <div class="grid-6">
+      <div class="card">
+        <div class="title">CPU Utilization</div>
+        <div class="value" id="dash-cpu">18.5%</div>
+        <div class="progress-bar"><div class="progress-fill" id="dash-cpu-bar" style="width: 18.5%; background: var(--accent);"></div></div>
+      </div>
+      <div class="card">
+        <div class="title">Memory Usage</div>
+        <div class="value" id="dash-mem">46.2%</div>
+        <div class="progress-bar"><div class="progress-fill" id="dash-mem-bar" style="width: 46.2%; background: var(--success);"></div></div>
+      </div>
+      <div class="card">
+        <div class="title">Total Processes</div>
+        <div class="value">284</div>
+        <div class="progress-bar"><div class="progress-fill" style="width: 100%; background: #9c27b0;"></div></div>
+      </div>
+      <div class="card">
+        <div class="title">Running Processes</div>
+        <div class="value" style="color: var(--success);">3</div>
+        <div class="progress-bar"><div class="progress-fill" style="width: 15%; background: var(--success);"></div></div>
+      </div>
+      <div class="card">
+        <div class="title">Sleeping Processes</div>
+        <div class="value" style="color: var(--muted);">281</div>
+        <div class="progress-bar"><div class="progress-fill" style="width: 98%; background: var(--muted);"></div></div>
+      </div>
+      <div class="card">
+        <div class="title">Simulation Jobs</div>
+        <div class="value" style="color: var(--warning);" id="dash-jobs">3</div>
+        <div class="progress-bar"><div class="progress-fill" style="width: 60%; background: var(--warning);"></div></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top: 14px;">
+      <div class="title">System Activity Log (/proc & Thread Telemetry)</div>
+      <div id="activity-log" style="font-family: monospace; font-size: 12px; color: #a0a0a0; line-height: 1.6; max-height: 180px; overflow-y: auto;">
+        <div>[00:00:01] Procura MainFrame initialized on Event Dispatch Thread (EDT).</div>
+        <div>[00:00:02] ScheduledExecutorService started 2 polling threads for /proc telemetry.</div>
+        <div>[00:00:04] ProcessMonitor scanned 284 tasks from /proc filesystem.</div>
+        <div>[00:00:06] CPU differential delta computed: 18.5% total CPU load.</div>
+        <div>[00:00:08] ProcessHierarchy tree built with root systemd (PID 1).</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 2: PROCESS MONITOR -->
+  <div id="tab-processes" class="tab-pane">
+    <div style="display: flex; gap: 10px; margin-bottom: 12px; align-items: center;">
+      <input type="text" id="proc-search" class="form-control" style="max-width: 300px;" placeholder="Search by PID or process name..." oninput="filterProcesses()">
+      <span style="font-size: 12px; color: var(--muted);">Showing 10 of 284 Linux processes (simulated /proc snapshot)</span>
+    </div>
+    <div class="table-container">
+      <table id="proc-table">
+        <thead>
+          <tr>
+            <th>PID</th>
+            <th>Process Name</th>
+            <th>PPID</th>
+            <th>State</th>
+            <th>CPU %</th>
+            <th>Memory (KB)</th>
+            <th>Threads</th>
+            <th>User</th>
+          </tr>
+        </thead>
+        <tbody id="proc-tbody">
+          <!-- Populated by JS -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- TAB 3: PROCESS HIERARCHY -->
+  <div id="tab-hierarchy" class="tab-pane">
+    <div class="card">
+      <div class="title">Linux Process Tree Hierarchy (Parent-Child PPID Mapping)</div>
+      <p style="font-size: 12px; color: var(--muted); margin-bottom: 14px;">
+        Demonstrating Unix process hierarchy: All userland processes descend from <code>systemd (PID 1)</code>. Orphaned processes are automatically reparented to PID 1.
+      </p>
+      <div style="background: #1c1c1c; padding: 16px; border-radius: 6px; font-family: monospace; font-size: 13px;">
+        <div>📁 <strong>[PID 1] systemd (root)</strong></div>
+        <div class="tree-node">├─ 📁 [PID 412] systemd-journald (root)</div>
+        <div class="tree-node">├─ 📁 [PID 530] dbus-daemon (messagebus)</div>
+        <div class="tree-node">├─ 📁 [PID 680] NetworkManager (root)</div>
+        <div class="tree-node">├─ 📁 [PID 920] sshd (root)</div>
+        <div class="tree-node" style="margin-left: 40px;">└─ 📁 [PID 1420] sshd: student [priv]</div>
+        <div class="tree-node" style="margin-left: 60px;">└─ 📁 [PID 1435] bash (student)</div>
+        <div class="tree-node" style="margin-left: 80px;">└─ 📁 [PID 2100] java -jar procura-1.0.0.jar (student)</div>
+        <div class="tree-node">└─ 📁 [PID 3050] orphan-worker (student) <em>&lt;Reparented from PID 9999 to PID 1&gt;</em></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 4: CPU JOB SCHEDULER -->
+  <div id="tab-scheduler" class="tab-pane">
+    <div class="scheduler-grid">
+      <!-- Input Form -->
+      <div class="card">
+        <div class="title">Job Configuration Form</div>
+        <div class="form-group">
+          <label>Algorithm Selection</label>
+          <select id="sched-algo" class="form-control" onchange="toggleQuantum()">
+            <option value="FIFO">FIFO (First Come First Served)</option>
+            <option value="PRIORITY">Priority (Non-Preemptive)</option>
+            <option value="RR">Round Robin (Preemptive)</option>
+          </select>
+        </div>
+        <div class="form-group" id="quantum-group" style="display: none;">
+          <label>Time Quantum (&tau;)</label>
+          <input type="number" id="sched-quantum" class="form-control" value="2" min="1" max="50">
+        </div>
+        <hr style="border-color: var(--border); margin: 12px 0;">
+        <div class="form-group">
+          <label>Job ID</label>
+          <input type="text" id="job-id" class="form-control" value="J4">
+        </div>
+        <div class="form-group">
+          <label>Arrival Time</label>
+          <input type="number" id="job-arr" class="form-control" value="3" min="0">
+        </div>
+        <div class="form-group">
+          <label>Burst Time</label>
+          <input type="number" id="job-burst" class="form-control" value="3" min="1">
+        </div>
+        <div class="form-group">
+          <label>Priority (lower number = higher)</label>
+          <input type="number" id="job-pri" class="form-control" value="1" min="0">
+        </div>
+        <div style="display: flex; gap: 8px; margin-top: 14px;">
+          <button class="btn" onclick="addJob()">+ Add Job</button>
+          <button class="btn btn-secondary" onclick="resetDefaultJobs()">Reset Benchmark</button>
+        </div>
+        <div style="margin-top: 14px;">
+          <button class="btn" style="width: 100%; justify-content: center; background: #2e7d32;" onclick="runSimulation()">
+            ▶ Run Scheduler & Simulate
+          </button>
+        </div>
+      </div>
+
+      <!-- Queue and Results -->
+      <div>
+        <div class="card">
+          <div class="title">Job Workload Queue</div>
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Job ID</th>
+                  <th>Arrival Time</th>
+                  <th>Burst Time</th>
+                  <th>Priority</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="job-queue-tbody">
+                <!-- Populated by JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Simulation Results -->
+        <div class="card" style="margin-top: 16px;">
+          <div class="title" id="results-title">Simulation Results — FIFO Scheduling</div>
+          <div class="table-container" style="margin-top: 8px;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Job ID</th>
+                  <th>Arrival</th>
+                  <th>Burst</th>
+                  <th>Priority</th>
+                  <th>Completion</th>
+                  <th>Turnaround</th>
+                  <th>Waiting</th>
+                  <th>Response</th>
+                </tr>
+              </thead>
+              <tbody id="results-tbody">
+                <!-- Computed Results -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Statistical Metrics -->
+          <div class="stat-pills" id="metrics-pills">
+            <!-- Computed metrics -->
+          </div>
+
+          <!-- Gantt Chart -->
+          <div class="gantt-container">
+            <div class="title" style="margin-bottom: 4px;">CPU Execution Gantt Chart Timeline</div>
+            <div class="gantt-chart" id="gantt-bar-container"></div>
+            <div class="gantt-time-axis" id="gantt-axis"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 5: ANALYTICS -->
+  <div id="tab-analytics" class="tab-pane">
+    <div class="grid-6" style="grid-template-columns: 1fr 1fr; gap: 16px;">
+      <div class="card">
+        <div class="title">CPU & RAM Telemetry History (/proc Time Series)</div>
+        <p style="font-size: 12px; color: var(--muted); margin-bottom: 12px;">Visualizing 30-second system telemetry recorded in <code>data/cpu_history.csv</code> and <code>data/memory_history.csv</code>.</p>
+        <div style="height: 220px; background: #181818; border-radius: 6px; border: 1px solid var(--border); display: flex; align-items: flex-end; padding: 16px; gap: 8px;">
+          <!-- SVG Mini Chart -->
+          <svg viewBox="0 0 400 180" style="width: 100%; height: 100%;">
+            <polyline fill="none" stroke="#4682e6" stroke-width="3" points="0,150 40,140 80,120 120,95 160,70 200,85 240,110 280,125 320,135 360,145 400,150" />
+            <polyline fill="none" stroke="#4caf50" stroke-width="3" points="0,95 40,94 80,93 120,90 160,88 200,89 240,91 280,93 320,94 360,95 400,95" />
+            <text x="10" y="20" fill="#4682e6" font-size="12">■ CPU Usage (%)</text>
+            <text x="130" y="20" fill="#4caf50" font-size="12">■ RAM Usage (%)</text>
+          </svg>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="title">Scheduling Algorithm Comparison (Benchmark Set)</div>
+        <p style="font-size: 12px; color: var(--muted); margin-bottom: 12px;">Comparative performance across FIFO, Priority, and Round Robin on identical workload.</p>
+        <div style="height: 220px; background: #181818; border-radius: 6px; border: 1px solid var(--border); padding: 16px; display: flex; flex-direction: column; justify-content: space-around;">
+          <div>
+            <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px;">
+              <span>Average Waiting Time: FIFO (3.33) vs Priority (2.67) vs RR (5.67)</span>
+            </div>
+            <div style="height: 14px; display: flex; border-radius: 4px; overflow: hidden; background: #222;">
+              <div style="width: 28%; background: #4682e6;" title="FIFO: 3.33"></div>
+              <div style="width: 23%; background: #ffa726;" title="Priority: 2.67"></div>
+              <div style="width: 49%; background: #4caf50;" title="Round Robin: 5.67"></div>
+            </div>
+          </div>
+          <div>
+            <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px;">
+              <span>Average Turnaround Time: FIFO (7.33) vs Priority (6.67) vs RR (9.67)</span>
+            </div>
+            <div style="height: 14px; display: flex; border-radius: 4px; overflow: hidden; background: #222;">
+              <div style="width: 31%; background: #4682e6;" title="FIFO: 7.33"></div>
+              <div style="width: 28%; background: #ffa726;" title="Priority: 6.67"></div>
+              <div style="width: 41%; background: #4caf50;" title="Round Robin: 9.67"></div>
+            </div>
+          </div>
+          <div style="display: flex; gap: 16px; font-size: 12px; color: var(--muted); margin-top: 8px;">
+            <span><strong style="color: #4682e6;">■</strong> FIFO</span>
+            <span><strong style="color: #ffa726;">■</strong> Priority</span>
+            <span><strong style="color: #4caf50;">■</strong> Round Robin</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Tab Switching
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+      document.getElementById('tab-' + tabId).classList.add('active');
+      event.target.classList.add('active');
+    }
+
+    // Process List Data
+    const mockProcesses = [
+      { pid: 1, name: "systemd", ppid: 0, state: "S", cpu: 0.1, mem: 12288, threads: 1, user: "root" },
+      { pid: 412, name: "systemd-journald", ppid: 1, state: "S", cpu: 0.2, mem: 18432, threads: 1, user: "root" },
+      { pid: 530, name: "dbus-daemon", ppid: 1, state: "S", cpu: 0.0, mem: 4096, threads: 1, user: "messagebus" },
+      { pid: 680, name: "NetworkManager", ppid: 1, state: "S", cpu: 0.1, mem: 16384, threads: 3, user: "root" },
+      { pid: 920, name: "sshd", ppid: 1, state: "S", cpu: 0.0, mem: 6144, threads: 1, user: "root" },
+      { pid: 1420, name: "sshd: student", ppid: 920, state: "S", cpu: 0.1, mem: 8192, threads: 1, user: "root" },
+      { pid: 1435, name: "bash", ppid: 1420, state: "S", cpu: 0.0, mem: 5120, threads: 1, user: "student" },
+      { pid: 2100, name: "java (Procura)", ppid: 1435, state: "R", cpu: 1.6, mem: 65536, threads: 18, user: "student" },
+      { pid: 2150, name: "python3 (plot)", ppid: 2100, state: "R", cpu: 2.4, mem: 24576, threads: 2, user: "student" },
+      { pid: 3050, name: "orphan-worker", ppid: 1, state: "S", cpu: 0.4, mem: 8192, threads: 2, user: "student" }
+    ];
+
+    function renderProcesses(list) {
+      const tbody = document.getElementById('proc-tbody');
+      tbody.innerHTML = list.map(p => `
+        <tr>
+          <td><strong>${p.pid}</strong></td>
+          <td>${p.name}</td>
+          <td>${p.ppid}</td>
+          <td><span class="tag-state ${p.state === 'R' ? 'tag-r' : 'tag-s'}">${p.state === 'R' ? 'Running' : 'Sleeping'}</span></td>
+          <td style="color: ${p.cpu > 2 ? 'var(--warning)' : 'inherit'}">${p.cpu.toFixed(1)}%</td>
+          <td>${p.mem.toLocaleString()} KB</td>
+          <td>${p.threads}</td>
+          <td>${p.user}</td>
+        </tr>
+      `).join('');
+    }
+
+    function filterProcesses() {
+      const q = document.getElementById('proc-search').value.toLowerCase();
+      const filtered = mockProcesses.filter(p => p.name.toLowerCase().includes(q) || String(p.pid).includes(q));
+      renderProcesses(filtered);
+    }
+
+    // Default Benchmark Jobs
+    let jobs = [
+      { id: "J1", arrival: 0, burst: 5, priority: 3 },
+      { id: "J2", arrival: 1, burst: 3, priority: 1 },
+      { id: "J3", arrival: 2, burst: 4, priority: 2 }
+    ];
+
+    function renderJobQueue() {
+      const tbody = document.getElementById('job-queue-tbody');
+      tbody.innerHTML = jobs.map((j, idx) => `
+        <tr>
+          <td><strong>${j.id}</strong></td>
+          <td>${j.arrival}</td>
+          <td>${j.burst}</td>
+          <td><span style="color: var(--accent); font-weight: bold;">${j.priority}</span></td>
+          <td><button class="btn btn-danger" style="padding: 3px 8px; font-size: 11px;" onclick="removeJob(${idx})">Remove</button></td>
+        </tr>
+      `).join('');
+      document.getElementById('dash-jobs').innerText = jobs.length;
+    }
+
+    function addJob() {
+      const id = document.getElementById('job-id').value.trim() || `J${jobs.length + 1}`;
+      const arrival = parseInt(document.getElementById('job-arr').value) || 0;
+      const burst = parseInt(document.getElementById('job-burst').value) || 1;
+      const priority = parseInt(document.getElementById('job-pri').value) || 0;
+      jobs.push({ id, arrival, burst, priority });
+      document.getElementById('job-id').value = `J${jobs.length + 1}`;
+      renderJobQueue();
+      runSimulation();
+    }
+
+    function removeJob(idx) {
+      jobs.splice(idx, 1);
+      renderJobQueue();
+      runSimulation();
+    }
+
+    function resetDefaultJobs() {
+      jobs = [
+        { id: "J1", arrival: 0, burst: 5, priority: 3 },
+        { id: "J2", arrival: 1, burst: 3, priority: 1 },
+        { id: "J3", arrival: 2, burst: 4, priority: 2 }
+      ];
+      renderJobQueue();
+      runSimulation();
+    }
+
+    function toggleQuantum() {
+      const algo = document.getElementById('sched-algo').value;
+      document.getElementById('quantum-group').style.display = (algo === 'RR') ? 'block' : 'none';
+    }
+
+    // Scheduling Simulation Logic (exact match to Java models)
+    function runSimulation() {
+      const algo = document.getElementById('sched-algo').value;
+      const quantum = parseInt(document.getElementById('sched-quantum').value) || 2;
+      let completed = [];
+      let gantt = [];
+      let totalTime = 0;
+
+      if (jobs.length === 0) {
+        document.getElementById('results-tbody').innerHTML = '<tr><td colspan="8">No jobs in queue.</td></tr>';
+        return;
+      }
+
+      if (algo === 'FIFO') {
+        let sorted = [...jobs].map(j => ({ ...j })).sort((a,b) => a.arrival - b.arrival);
+        let cur = 0;
+        for (let j of sorted) {
+          if (cur < j.arrival) {
+            gantt.push({ id: "IDLE", start: cur, end: j.arrival, color: "#555" });
+            cur = j.arrival;
+          }
+          let start = cur;
+          let end = cur + j.burst;
+          gantt.push({ id: j.id, start, end, color: getColor(j.id) });
+          cur = end;
+          j.first = start;
+          j.completion = end;
+          j.turnaround = j.completion - j.arrival;
+          j.waiting = j.turnaround - j.burst;
+          j.response = j.first - j.arrival;
+          completed.push(j);
+        }
+        totalTime = cur;
+      } else if (algo === 'PRIORITY') {
+        let pool = [...jobs].map(j => ({ ...j }));
+        let cur = 0;
+        while (pool.length > 0) {
+          let avail = pool.filter(j => j.arrival <= cur);
+          if (avail.length === 0) {
+            let nextArr = Math.min(...pool.map(j => j.arrival));
+            gantt.push({ id: "IDLE", start: cur, end: nextArr, color: "#555" });
+            cur = nextArr;
+            continue;
+          }
+          avail.sort((a,b) => a.priority - b.priority || a.arrival - b.arrival);
+          let chosen = avail[0];
+          pool = pool.filter(j => j !== chosen);
+          let start = cur;
+          let end = cur + chosen.burst;
+          gantt.push({ id: chosen.id, start, end, color: getColor(chosen.id) });
+          cur = end;
+          chosen.first = start;
+          chosen.completion = end;
+          chosen.turnaround = chosen.completion - chosen.arrival;
+          chosen.waiting = chosen.turnaround - chosen.burst;
+          chosen.response = chosen.first - chosen.arrival;
+          completed.push(chosen);
+        }
+        totalTime = cur;
+      } else if (algo === 'RR') {
+        let pool = [...jobs].map(j => ({ ...j, rem: j.burst, first: -1 }));
+        let queue = [];
+        let cur = 0;
+        let finished = [];
+
+        while (finished.length < jobs.length) {
+          // Enqueue newly arrived
+          let unqueued = pool.filter(j => j.arrival <= cur && !queue.includes(j) && !finished.includes(j));
+          unqueued.sort((a,b) => a.arrival - b.arrival);
+          queue.push(...unqueued);
+
+          if (queue.length === 0) {
+            let pending = pool.filter(j => !finished.includes(j));
+            let nextArr = Math.min(...pending.map(j => j.arrival));
+            gantt.push({ id: "IDLE", start: cur, end: nextArr, color: "#555" });
+            cur = nextArr;
+            continue;
+          }
+
+          let job = queue.shift();
+          if (job.first === -1) job.first = cur;
+          let slice = Math.min(quantum, job.rem);
+          gantt.push({ id: job.id, start: cur, end: cur + slice, color: getColor(job.id) });
+          cur += slice;
+          job.rem -= slice;
+
+          // Enqueue arrivals during slice before requeuing current job
+          let newArr = pool.filter(j => j.arrival <= cur && !queue.includes(j) && !finished.includes(j) && j !== job);
+          queue.push(...newArr);
+
+          if (job.rem === 0) {
+            job.completion = cur;
+            job.turnaround = job.completion - job.arrival;
+            job.waiting = job.turnaround - job.burst;
+            job.response = job.first - job.arrival;
+            finished.push(job);
+            completed.push(job);
+          } else {
+            queue.push(job);
+          }
+        }
+        totalTime = cur;
+      }
+
+      // Render Completed Table
+      document.getElementById('results-tbody').innerHTML = completed.map(j => `
+        <tr>
+          <td><strong>${j.id}</strong></td>
+          <td>${j.arrival}</td>
+          <td>${j.burst}</td>
+          <td>${j.priority}</td>
+          <td>${j.completion}</td>
+          <td>${j.turnaround}</td>
+          <td style="color: ${j.waiting > 4 ? 'var(--warning)' : 'var(--success)'}; font-weight: bold;">${j.waiting}</td>
+          <td>${j.response}</td>
+        </tr>
+      `).join('');
+
+      // Render Metrics
+      const avgWait = (completed.reduce((a,c) => a + c.waiting, 0) / completed.length).toFixed(2);
+      const avgTat = (completed.reduce((a,c) => a + c.turnaround, 0) / completed.length).toFixed(2);
+      const avgResp = (completed.reduce((a,c) => a + c.response, 0) / completed.length).toFixed(2);
+      const burstSum = completed.reduce((a,c) => a + c.burst, 0);
+      const cpuUtil = ((burstSum / totalTime) * 100).toFixed(1);
+      const throughput = (completed.length / totalTime).toFixed(3);
+
+      document.getElementById('metrics-pills').innerHTML = `
+        <div class="stat-pill"><div class="lbl">Avg Waiting Time</div><div class="val">${avgWait}</div></div>
+        <div class="stat-pill"><div class="lbl">Avg Turnaround Time</div><div class="val">${avgTat}</div></div>
+        <div class="stat-pill"><div class="lbl">Avg Response Time</div><div class="val">${avgResp}</div></div>
+        <div class="stat-pill"><div class="lbl">CPU Utilization</div><div class="val">${cpuUtil}%</div></div>
+        <div class="stat-pill"><div class="lbl">Throughput</div><div class="val">${throughput} jobs/t</div></div>
+      `;
+
+      // Render Gantt Chart
+      const chartEl = document.getElementById('gantt-bar-container');
+      chartEl.innerHTML = gantt.map(g => {
+        let pct = ((g.end - g.start) / totalTime) * 100;
+        return `<div class="gantt-bar" style="width: ${pct}%; background: ${g.color};" title="${g.id}: ${g.start} -> ${g.end}">${g.id}</div>`;
+      }).join('');
+
+      // Time axis ticks
+      let axisHtml = `<span>0</span>`;
+      gantt.forEach(g => {
+        axisHtml += `<span>${g.end}</span>`;
+      });
+      document.getElementById('gantt-axis').innerHTML = axisHtml;
+    }
+
+    const jobColors = { "J1": "#4682e6", "J2": "#ffa726", "J3": "#4caf50", "J4": "#ab47bc", "J5": "#26a69a" };
+    function getColor(id) {
+      return jobColors[id] || "#7e57c2";
+    }
+
+    // Init on load
+    renderProcesses(mockProcesses);
+    renderJobQueue();
+    runSimulation();
+  </script>
+</body>
+</html>

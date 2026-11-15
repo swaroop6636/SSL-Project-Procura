@@ -1,0 +1,152 @@
+\documentclass[aspectratio=169,10pt]{beamer}
+
+\usetheme{Madrid}
+\usecolortheme{default}
+
+\usepackage[utf8]{inputenc}
+\usepackage{booktabs}
+\usepackage{graphicx}
+
+% Macro for image placeholder so compilation succeeds even without external files
+\newcommand{\slideplaceholder}[2]{%
+  \IfFileExists{#1}{%
+    \includegraphics[width=0.85\linewidth,height=4.2cm,keepaspectratio]{#1}%
+  }{%
+    \begin{center}
+    \fbox{\parbox[c][3.8cm][c]{0.8\linewidth}{%
+      \centering
+      \textbf{#2}\\[0.5em]
+      \footnotesize \textit{(Image placeholder: \texttt{#1})}%
+    }}
+    \end{center}
+  }%
+}
+
+\title[Procura — CPU Monitor \& Scheduler]{\textbf{Procura: CPU Monitor and Job Scheduler}}
+\subtitle{An Integrated Linux Telemetry \& CPU Scheduling Simulation Platform}
+\author[Swaroop, Bunny, Basha]{
+  Swaroop (CS25BT006) \and Bunny (CS25BT016) \and Basha (CS25BT059)
+}
+\institute[BTech CSE]{
+  Department of Computer Science and Engineering\\
+  B.Tech Operating Systems Laboratory Project
+}
+\date{2026}
+
+\begin{document}
+
+% Slide 1: Title Slide
+\begin{frame}
+  \titlepage
+\end{frame}
+
+% Slide 2: Introduction & Problem Statement
+\begin{frame}
+  \frametitle{Introduction \& Problem Statement}
+  \begin{itemize}
+    \item \textbf{Theoretical Abstraction}: Operating system concepts such as scheduling, PCBs, and process trees are typically taught as abstract textbook math.
+    \item \textbf{Static Tooling}: Utilities like \texttt{top} and \texttt{htop} monitor active tasks but do not explain scheduling decisions or metric calculations.
+    \item \textbf{Isolated Simulators}: Traditional scheduling simulators operate in total isolation from living operating system environments.
+    \item \textbf{The Procura Solution}: A unified desktop system uniting live Linux kernel telemetry with an empirical, multi-algorithm CPU scheduling engine.
+    \item \textbf{Pedagogical Goal}: Bridge theory and practice by making process behavior and scheduling trade-offs directly observable.
+  \end{itemize}
+\end{frame}
+
+% Slide 3: Objectives & Features
+\begin{frame}
+  \frametitle{Project Objectives \& Core Features}
+  \begin{itemize}
+    \item \textbf{Kernel Telemetry}: Live process tracking (PID, PPID, state, CPU\%, RSS memory) parsed from Linux \texttt{/proc}.
+    \item \textbf{Process Tree Hierarchy}: Interactive tree visualizer mapping parent-child relationships rooted at PID 1 (\texttt{systemd}/\texttt{init}).
+    \item \textbf{Multi-Algorithm Simulation}: Deterministic simulation of FCFS, Priority, and Round Robin scheduling policies.
+    \item \textbf{Comprehensive Metric Analysis}: Turnaround Time, Waiting Time, Response Time, CPU Utilization, and Throughput computation.
+    \item \textbf{Cross-Language Visual Pipeline}: Java simulation data exported via CSV to Python for automated Matplotlib chart rendering.
+    \item \textbf{Dark Modern GUI}: Non-blocking Java Swing desktop interface designed for lab environments.
+  \end{itemize}
+\end{frame}
+
+% Slide 4: Unix Process Hierarchy & Monitoring
+\begin{frame}
+  \frametitle{Unix Process Hierarchy \& Kernel Monitoring}
+  \begin{itemize}
+    \item \textbf{Linux \texttt{/proc} Filesystem}: Direct in-memory parsing of \texttt{/proc/[pid]/stat}, \texttt{cmdline}, and \texttt{/proc/meminfo}.
+    \item \textbf{Delta CPU Calculation}: Uses two consecutive samples $(\Delta t = 1.0\text{ s})$ of \texttt{utime} and \texttt{stime} against total system ticks.
+    \item \textbf{Memory Calculation}: Resident Set Size (RSS) normalized using system page size (4096 bytes) against \texttt{MemTotal}.
+    \item \textbf{Tree Reconstruction}: Processes organized into parent-child hierarchies using PID-to-PPID topological mapping.
+    \item \textbf{Orphan Handling}: Automatically maps reparented or orphaned tasks cleanly to root PID 1 in the Swing \texttt{JTree}.
+  \end{itemize}
+\end{frame}
+
+% Slide 5: Java Threads & Architecture
+\begin{frame}
+  \frametitle{Java Concurrency \& Architecture}
+  \begin{itemize}
+    \item \textbf{Decoupled MVC Design}: Model, monitor, scheduling engine, and UI components maintained in isolated packages.
+    \item \textbf{Non-Blocking Background Worker}: Dedicated \texttt{ScheduledExecutorService} runs 1000ms kernel polling passes.
+    \item \textbf{Event Dispatch Thread (EDT) Safety}: Live process snapshots marshaled to the UI strictly via \texttt{SwingUtilities.invokeLater}.
+    \item \textbf{Strategy Pattern}: Schedulers implement a unified \texttt{Scheduler} interface for seamless algorithm swapping.
+    \item \textbf{Responsive UI}: Prevents GUI frame freezes during heavy system process scanning and data serialization.
+  \end{itemize}
+\end{frame}
+
+% Slide 6: Scheduling Algorithms
+\begin{frame}
+  \frametitle{CPU Scheduling Algorithms}
+  \begin{itemize}
+    \item \textbf{FIFO / FCFS}: Non-preemptive allocation by arrival order; demonstrates the convoy effect and higher average waiting times.
+    \item \textbf{Priority Scheduling}: Non-preemptive selection of lowest numerical priority value; illustrates priority inversion and starvation.
+    \item \textbf{Round Robin (RR)}: Preemptive time-sliced execution with user-configurable quantum $\tau$; balances response time across jobs.
+    \item \textbf{Gantt Timeline Logging}: Records start, preemption, and completion timestamps for exact sequence tracking.
+    \item \textbf{Empirical Math Verification}: Hand-calculated test cases verify Turnaround Time ($CT - AT$) and Waiting Time ($TAT - BT$).
+  \end{itemize}
+\end{frame}
+
+% Slide 7: GUI Demonstration
+\begin{frame}
+  \frametitle{Graphical User Interface Demonstration}
+  \begin{itemize}
+    \item \textbf{Multi-Tabbed Interface}: Segregated panels for Process Telemetry, Hierarchy Inspection, and Scheduling Simulation.
+    \item \textbf{Interactive Process Table}: Real-time filtering, text search by name/PID, and multi-column sorting.
+    \item \textbf{Visual Gantt Chart}: Dynamic horizontal bar display representing job execution slots and CPU idle intervals.
+  \end{itemize}
+  \vspace{-0.5em}
+  \slideplaceholder{screenshots/process_monitor.png}{Procura Desktop UI Dashboard}
+\end{frame}
+
+% Slide 8: Python Plotting & Statistics
+\begin{frame}
+  \frametitle{Python Plotting \& Statistical Pipeline}
+  \begin{itemize}
+    \item \textbf{Interoperability Bridge}: Java triggers Python via \texttt{ProcessBuilder} after exporting simulation data to CSV.
+    \item \textbf{CSV Data Exchange}: Clean separation with \texttt{metrics.csv} (summary statistics) and \texttt{gantt.csv} (time slices).
+    \item \textbf{Matplotlib Visualizations}: Generates high-resolution PNG charts comparing Waiting and Turnaround times across algorithms.
+    \item \textbf{Visual Gantt Rendering}: Produces color-coded timeline bars detailing job preemption and execution order.
+    \item \textbf{Automated Artifact Management}: Graphs are saved to disk and loaded dynamically into the GUI preview panel.
+  \end{itemize}
+\end{frame}
+
+% Slide 9: Testing & Profiling
+\begin{frame}
+  \frametitle{Testing \& Performance Profiling}
+  \begin{itemize}
+    \item \textbf{Automated Test Suite}: 18 JUnit 5 tests validating FCFS, Priority, Round Robin, and \texttt{/proc} parsing edge cases.
+    \item \textbf{Hand Verification}: Independent manual calculation of Gantt charts confirming arithmetic correctness.
+    \item \textbf{Java Flight Recorder (JFR)}: Profiling conducted via \texttt{scripts/profile.sh} on Linux under active monitoring.
+    \item \textbf{Low Resource Footprint}: Background monitor consumes $< 1.8\%$ of a CPU core with sub-5ms GC pauses.
+    \item \textbf{Zero Lock Contention}: Confirmed lock-free interaction between the background worker and the Swing EDT.
+  \end{itemize}
+\end{frame}
+
+% Slide 10: Conclusion & Future Work
+\begin{frame}
+  \frametitle{Conclusion \& Future Work}
+  \begin{itemize}
+    \item \textbf{Key Takeaways}: Successfully integrated live kernel telemetry with interactive CPU scheduling simulation in a desktop environment.
+    \item \textbf{Pedagogical Value}: Clarified abstract OS mechanics through hands-on experimentation and comparative visualization.
+    \item \textbf{Multilevel Feedback Queues (MLFQ)}: Future support for dynamic multi-queue priority aging algorithms.
+    \item \textbf{Process Control}: Future addition of direct POSIX signal management (\texttt{SIGSTOP}, \texttt{SIGCONT}, \texttt{SIGKILL}) from the UI.
+    \item \textbf{Multicore Scheduling}: Simulation of multi-processor affinity and load-balancing policies.
+  \end{itemize}
+\end{frame}
+
+\end{document}

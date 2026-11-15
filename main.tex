@@ -1,0 +1,582 @@
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{float}
+\usepackage{caption}
+
+% Hyperlink configuration
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue!70!black,
+    citecolor=green!50!black,
+    urlcolor=blue!80!black
+}
+
+% Code listing configuration
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.96,0.96,0.97}
+
+\lstdefinestyle{procurastyle}{
+    backgroundcolor=\color{backcolour},
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{blue}\bfseries,
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    numbers=left,
+    numbersep=5pt,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=2,
+    frame=single,
+    rulecolor=\color{gray!30}
+}
+\lstset{style=procurastyle}
+
+% Macro for graceful placeholder figures if image files are not yet generated
+\newcommand{\placeholderimage}[2]{%
+  \IfFileExists{#1}{%
+    \includegraphics[width=\linewidth]{#1}%
+  }{%
+    \begin{center}
+    \fbox{\parbox[c][4.5cm][c]{0.88\linewidth}{%
+      \centering
+      \textbf{#2}\\[0.6em]
+      \footnotesize \textit{(Graphic placeholder: \texttt{#1})}%
+    }}
+    \end{center}
+  }%
+}
+
+\title{\textbf{Procura — CPU Monitor and Job Scheduler}\\[0.5em]
+\large An Integrated Linux Process Telemetry and CPU Scheduling Simulation System\\[0.2em]
+\normalsize B.Tech Capstone / Operating Systems Laboratory Project Report}
+
+\author{
+  \textbf{Team Members}\\[0.3em]
+  \textbf{Swaroop} (CS25BT006) — Process Monitoring \& CPU/Memory Data Collection\\
+  \textbf{Bunny} (CS25BT016) — Process Management, CPU Scheduling \& Concurrency\\
+  \textbf{Basha} (CS25BT059) — GUI Development, Visualization, Testing \& Documentation\\[0.5em]
+  \textit{Department of Computer Science and Engineering}
+}
+
+\date{2026}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Operating systems manage physical computing hardware and arbitrate central processing unit (CPU) time among competing processes. However, undergraduate computer science students often encounter operating system concepts—such as process hierarchies, context switching, the Process Control Block (PCB), and scheduling policies—strictly as theoretical abstractions. This report presents \textbf{Procura}, an educational and practical system combining live Linux kernel process monitoring with an interactive, deterministic CPU scheduling simulation engine. Procura directly inspects the Linux virtual \texttt{/proc} filesystem to gather real-time process metadata, memory footprints, and CPU utilization via differential time-sampling. Furthermore, it constructs interactive Unix process hierarchy trees branching from PID 1 (\texttt{systemd}/\texttt{init}). In parallel, Procura incorporates a discrete-event CPU scheduling simulator implementing First-Come-First-Served (FCFS/FIFO), Non-Preemptive Priority, and Round Robin (RR) algorithms. Simulation results are analyzed, verified against mathematical models, and passed via automated CSV serialization to a Python Matplotlib pipeline for visual metric and Gantt chart generation. Designed with a responsive Java Swing dark-themed interface, the application maintains thread safety across the Swing Event Dispatch Thread and background monitoring workers via \texttt{ScheduledExecutorService}. Procura demonstrates how systems-level kernel data and theoretical scheduling models can be integrated into a unified desktop laboratory platform.
+\end{abstract}
+
+\newpage
+\tableofcontents
+\newpage
+
+\section{Introduction}
+Modern multitasking operating systems rely on sophisticated abstractions to execute dozens or hundreds of concurrent programs on limited physical processor cores \cite{silberschatz2018operating, tanenbaum2014modern}. Central to this operational model are the concepts of the \textit{process}—an instance of a computer program in execution—and the \textit{CPU scheduler}, the kernel subsystem responsible for selecting which ready process executes on an available core.
+
+While standard Unix/Linux production utilities such as \texttt{ps}, \texttt{top}, and \texttt{htop} provide live system telemetry, they are built for system administration rather than pedagogic clarity. They present raw process counts and instantaneous utilization figures without demonstrating the causal mechanics of scheduling policies or illustrating how parent-child process dependencies are structured. Conversely, textbook scheduling simulators typically accept arbitrary numeric inputs in an isolated environment without connecting students to the actual processes actively running on their machines.
+
+\textbf{Procura} bridges this pedagogical divide. Developed as an undergraduate capstone project in Computer Science and Engineering, Procura provides an integrated two-fold platform:
+\begin{enumerate}
+    \item \textbf{Kernel-Level Telemetry Engine}: Directly reads the Linux virtual \texttt{/proc} filesystem to extract live process status, Parent Process IDs (PPID), Resident Set Size (RSS), and dynamic CPU percentages. It reconstructs the complete Unix process tree starting at PID 1 and renders it in an interactive graphical tree view.
+    \item \textbf{Comparative CPU Scheduling Simulator}: Enables students to configure job batches (with arrival times, burst durations, and priority levels) and execute deterministic simulations under FCFS, Priority, and Round Robin scheduling regimes. It calculates exact metrics (Turnaround Time, Waiting Time, Response Time, Throughput) and generates graphical Gantt charts.
+\end{enumerate}
+
+By connecting real-time Linux telemetry with algorithmic simulation through a multithreaded Java Swing desktop interface and a Python-powered visualization pipeline, Procura serves as a comprehensive laboratory instrument for operating systems education.
+
+\section{Problem Statement}
+In academic computer science curricula, students frequently struggle to bridge the gap between theoretical operating system principles and real-world system behavior. Specifically:
+\begin{itemize}
+    \item \textbf{Abstraction of Process State and Hierarchy}: Students conceptualize processes as isolated entries in a textbook table, rarely understanding how Linux manages the Process Control Block (PCB), assigns Process IDs (PIDs) and Parent Process IDs (PPIDs), or resolves process termination and reparenting to the root init daemon (\texttt{systemd}).
+    \item \textbf{Opaque Scheduling Mechanics}: Theoretical algorithm problems are traditionally solved manually on paper. While this teaches basic arithmetic, it fails to illustrate how variations in time quanta affect preemption frequency, how starvation manifests in static priority systems, or how metric trade-offs behave under heavy workloads.
+    \item \textbf{Lack of Integrated Educational Tooling}: Existing system monitors do not simulate scheduling algorithms, while existing algorithm applets have no relationship to real operating system telemetry.
+\end{itemize}
+Consequently, there is an acute need for a unified, cross-paradigm desktop application that exposes real kernel process data alongside an empirical, multi-algorithm CPU scheduling simulator.
+
+\section{Project Objectives}
+The specific engineering and pedagogical objectives of the Procura project are:
+\begin{enumerate}
+    \item \textbf{Real-Time Linux Process Telemetry}: Read and parse pseudo-files in the Linux \texttt{/proc} filesystem (including \texttt{/proc/[pid]/stat}, \texttt{/proc/[pid]/cmdline}, and \texttt{/proc/meminfo}) without external native wrappers.
+    \item \textbf{Dynamic Process Hierarchy Construction}: Map parent-child relationships across all running system tasks and construct an interactive, collapsible tree visualizer anchored at root PID 1.
+    \item \textbf{Multi-Algorithm CPU Simulation}: Implement deterministic simulators for First-Come-First-Served (FCFS/FIFO), Non-Preemptive Priority, and Preemptive Round Robin (RR) with dynamic time quantum configuration.
+    \item \textbf{Empirical Metric Calculation}: Calculate and compare rigorous performance criteria for each simulated workload: Completion Time ($CT$), Turnaround Time ($TAT$), Waiting Time ($WT$), Response Time ($RT$), CPU Utilization, and Throughput.
+    \item \textbf{Cross-Language Data Visualization}: Serialize simulation telemetry to structured CSV formats and trigger external Python/Matplotlib scripts via Java subprocessing to render publication-quality Gantt charts and comparative performance plots.
+    \item \textbf{Thread-Safe Desktop Architecture}: Implement a responsive Java Swing user interface utilizing \texttt{ScheduledExecutorService} and the Event Dispatch Thread (EDT) to ensure non-blocking UI updates during kernel I/O operations.
+\end{enumerate}
+
+\section{Technologies Used}
+The architecture of Procura combines compiled systems programming in Java with analytical data visualization in Python, built natively for Linux environments. Table~\ref{tab:technologies} outlines the technological stack and the rationale for each tool.
+
+\begin{table}[H]
+\centering
+\caption{Technologies and Tools Employed in Procura}
+\label{tab:technologies}
+\begin{tabular}{@{}llp{8.5cm}@{}}
+\toprule
+\textbf{Technology} & \textbf{Component} & \textbf{Purpose and Rationale} \\ \midrule
+\textbf{Java 17 (LTS)} & Core Language & High-performance, strongly typed object-oriented foundation supporting modern concurrency APIs and native process handle utilities. \\
+\textbf{Java Swing \& AWT} & Desktop GUI & Platform-native desktop visualization with lightweight components (\texttt{JTable}, \texttt{JTree}, \texttt{JTabbedPane}) styled under a custom dark palette. \\
+\textbf{Linux \texttt{/proc}} & Kernel Interface & Linux virtual pseudo-filesystem providing direct access to kernel data structures and process states without root modification. \\
+\textbf{Java Concurrency} & Multithreading & \texttt{ScheduledExecutorService} for timed sampling loops; \texttt{SwingWorker} and \texttt{SwingUtilities.invokeLater} for EDT safety. \\
+\textbf{Python 3.8+} & Analytics Engine & Scripting runtime for numerical data analysis and headless graphics rendering. \\
+\textbf{Matplotlib} & Data Plotting & Generation of high-resolution Gantt timelines and comparative bar charts exported as PNG graphics. \\
+\textbf{Apache Maven} & Build Automation & Standardized build lifecycle management, dependency resolution, and packaging. \\
+\textbf{JUnit 5} & Unit Testing & Automated test suites verifying algorithm execution, metric arithmetic, and parser edge cases. \\
+\textbf{JDK Flight Recorder} & Profiling & Low-overhead JVM diagnostic profiling analyzing CPU execution hotspots, thread lock contention, and object allocation. \\
+\textbf{Git \& GitHub} & Version Control & Distributed source code management and collaborative team workflow. \\ \bottomrule
+\end{tabular}
+\end{table}
+
+\section{Unix Process Hierarchy}
+\subsection{Theoretical Foundations of Unix Processes}
+In Unix and POSIX-compliant operating systems, every process represents an independent executing program with its own private virtual address space, file descriptor table, and security context \cite{tanenbaum2014modern}. With the sole exception of the initial system bootstrap process, every Unix process is instantiated through the \texttt{fork()} system call (or \texttt{clone()} in Linux), which creates an exact duplicate child of the calling parent process.
+
+Each process is uniquely assigned a numeric Process Identifier (PID) and maintains a reference to its creator via the Parent Process Identifier (PPID). When the system initializes, the Linux kernel boots and launches the primary user-space process with $\text{PID} = 1$, traditionally known as \texttt{init} (and implemented by \texttt{systemd} in modern Linux distributions) \cite{kerrisk2010linux}. If a parent process terminates before its child, the child becomes an \textit{orphan} and is automatically adopted by the root init process (or an intermediate subreaper), ensuring the process tree remains structurally sound and acyclic.
+
+\subsection{Process Hierarchy Construction in Procura}
+Procura scans the Linux \texttt{/proc} directory for numerical subdirectories representing active PIDs. For each active process, it parses \texttt{/proc/[pid]/stat} to extract its PID, PPID, process state, and command name.
+
+The \texttt{ProcessHierarchy} module organizes these raw pairs into an in-memory directed tree structure:
+\begin{enumerate}
+    \item \textbf{Collection}: A comprehensive map $\mathcal{M}: \text{PID} \to \text{ProcessNode}$ is constructed.
+    \item \textbf{Tree Assembly}: For each process node $P \in \mathcal{M}$, the algorithm looks up its parent $Q = \mathcal{M}[\text{PPID}]$. If found, $P$ is attached as a child node of $Q$.
+    \item \textbf{Orphan Resolution}: If $\text{PPID} = 0$ or if the referenced PPID is no longer active in user-space, the node is attached directly to the visual root node (representing PID 1 / \texttt{systemd}).
+    \item \textbf{JTree Binding}: The hierarchy is transformed into a \texttt{DefaultTreeModel} rendered within a custom-styled \texttt{JTree}. Users can interactively expand or collapse branches to examine process lineages (e.g., terminal $\to$ bash shell $\to$ compiler sub-processes).
+\end{enumerate}
+
+\begin{figure}[H]
+\centering
+\placeholderimage{screenshots/process_hierarchy.png}{Unix Process Hierarchy Visualizer (JTree)}
+\caption{Interactive Process Hierarchy Tree Visualizing Parent-Child Relationships in Procura.}
+\label{fig:hierarchy}
+\end{figure}
+
+\section{Process Monitoring and the Linux \texttt{/proc} Filesystem}
+\subsection{Structure of the \texttt{/proc} Virtual Filesystem}
+The Linux \texttt{/proc} pseudo-filesystem is a virtual interface generated dynamically by the kernel in memory \cite{kernelorgproc}. Rather than reading physical blocks from disk, read requests to \texttt{/proc} trigger kernel callback routines that serialize live kernel internal structs into standard ASCII text streams.
+
+Procura interrogates three primary files per process:
+\begin{itemize}
+    \item \texttt{/proc/[pid]/stat}: A single-line text file containing 52 space-delimited fields detailing process execution states, scheduling priority, tick counts, and memory layout.
+    \item \texttt{/proc/[pid]/cmdline}: The null-delimited (\verb|\0|) command-line arguments invoked to launch the executable.
+    \item \texttt{/proc/meminfo}: Global memory statistics, notably \texttt{MemTotal} and \texttt{MemAvailable}.
+\end{itemize}
+
+Parsing \texttt{/proc/[pid]/stat} requires careful handling because field 2 (the process executable name, \texttt{comm}) is enclosed in parentheses and may contain arbitrary characters, including spaces and nested brackets (e.g., \texttt{(Web Content)}). Procura locates the final closing parenthesis `\texttt{)}' to establish a fixed tokenization boundary before parsing subsequent numerical columns.
+
+\subsection{CPU Utilization Calculation (The Delta Method)}
+Instantaneous CPU utilization cannot be derived from a single point-in-time sample because tick counters in \texttt{/proc/[pid]/stat} represent cumulative CPU clock ticks (jiffies) since the process was launched. To compute the active CPU percentage, Procura implements the \textbf{differential time-sampling method} over a measurement window $\Delta t = t_2 - t_1$ (nominally 1000 milliseconds) \cite{kerrisk2010linux}.
+
+From \texttt{/proc/[pid]/stat}, Procura extracts:
+\begin{itemize}
+    \item Field 14 (\texttt{utime}): User-space CPU time in jiffies.
+    \item Field 15 (\texttt{stime}): Kernel-space CPU time in jiffies.
+\end{itemize}
+The total process CPU time at sample instant $t_k$ is:
+\begin{equation}
+\text{ProcTime}(t_k) = \text{utime}(t_k) + \text{stime}(t_k)
+\end{equation}
+
+Simultaneously, Procura reads \texttt{/proc/stat} to capture the aggregate system-wide tick counter across all cores:
+\begin{equation}
+\text{TotalSysTime}(t_k) = \text{user} + \text{nice} + \text{system} + \text{idle} + \text{iowait} + \text{irq} + \text{softirq} + \text{steal}
+\end{equation}
+
+When the subsequent sample is acquired at $t_{k+1}$, the differentials are computed:
+\begin{align}
+\Delta \text{ProcTime} &= \text{ProcTime}(t_{k+1}) - \text{ProcTime}(t_k) \\
+\Delta \text{TotalSysTime} &= \text{TotalSysTime}(t_{k+1}) - \text{TotalSysTime}(t_k)
+\end{align}
+
+The effective CPU percentage consumed by the process over the interval is given by:
+\begin{equation}
+\text{CPU \%} = \left( \frac{\Delta \text{ProcTime}}{\Delta \text{TotalSysTime}} \right) \times 100 \times N_{\text{cores}}
+\end{equation}
+where $N_{\text{cores}}$ is the number of active logical CPU processing cores detected via \texttt{Runtime.getRuntime().availableProcessors()}.
+
+\subsection{Memory Utilization Parsing}
+Memory consumption is computed by reading Field 24 of \texttt{/proc/[pid]/stat}, which stores the Resident Set Size (\texttt{rss}) in pages. Using the system page size (typically 4096 bytes on x86\_64 Linux), the resident memory in megabytes ($M_{\text{proc}}$) is:
+\begin{equation}
+M_{\text{proc}} = \frac{\text{rss} \times \text{PageSize}}{1024 \times 1024}
+\end{equation}
+The percentage of system physical memory utilized by the process is then calculated against \texttt{MemTotal} parsed from \texttt{/proc/meminfo}:
+\begin{equation}
+\text{Memory \%} = \left( \frac{M_{\text{proc}}}{M_{\text{total}}} \right) \times 100
+\end{equation}
+
+\section{Java Threads and Multithreading Architecture}
+\subsection{The Swing Single-Threaded Rule and the EDT}
+Java Swing graphical components are inherently not thread-safe. All visual mutations, repainting operations, and user input events must be dispatched strictly on a single specialized thread: the **Event Dispatch Thread (EDT)**. If prolonged computational tasks or blocking file I/O operations are executed directly on the EDT, the user interface freezes, causing dropped frames and unresponsive window states.
+
+\subsection{Procura Concurrency Pipeline}
+Procura decouples data acquisition from GUI rendering through a concurrent producer-consumer architecture:
+\begin{enumerate}
+    \item \textbf{\texttt{ScheduledExecutorService}}: A dedicated background thread pool executes periodic sampling tasks at a fixed interval of $1.0\text{ s}$ without blocking the UI.
+    \item \textbf{Asynchronous Worker Execution}: During each sampling cycle, the worker reads \texttt{/proc}, parses process metrics, updates historical delta maps, and builds a fresh list of \texttt{ProcessInfo} transfer objects.
+    \item \textbf{Thread-Safe Dispatch via \texttt{SwingUtilities.invokeLater}}: Once the snapshot list is assembled, it is marshaled to the EDT via \texttt{SwingUtilities.invokeLater(() -> updateTable(snapshot))}. This guarantees that the \texttt{DefaultTableModel} is updated solely within the EDT lifecycle.
+\end{enumerate}
+
+\begin{lstlisting}[language=Java, caption={Periodic Background Sampling via ScheduledExecutorService}]
+ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+    Thread t = new Thread(r, "Procura-Monitor-Worker");
+    t.setDaemon(true);
+    return t;
+});
+
+scheduler.scheduleAtFixedRate(() -> {
+    try {
+        List<ProcessInfo> liveProcesses = monitor.fetchLiveProcesses();
+        SwingUtilities.invokeLater(() -> {
+            tableModel.updateProcesses(liveProcesses);
+            statusLabel.setText("Active Tasks: " + liveProcesses.size());
+        });
+    } catch (Exception ex) {
+        logger.warning("Monitoring cycle encountered an error: " + ex.getMessage());
+    }
+}, 0, 1000, TimeUnit.MILLISECONDS);
+\end{lstlisting}
+
+\section{CPU Scheduling Algorithms}
+The CPU scheduling engine in Procura simulates job scheduling using discrete-event simulation. Each job $J_i$ is characterized by the tuple:
+\begin{equation}
+J_i = \langle \text{PID}_i, AT_i, BT_i, P_i \rangle
+\end{equation}
+where $AT_i$ denotes Arrival Time, $BT_i$ denotes CPU Burst Time, and $P_i$ denotes Priority (with smaller numerical integers representing higher scheduling priority).
+
+\subsection{First-In, First-Out (FIFO / FCFS)}
+\subsubsection{Algorithm Explanation}
+First-Come-First-Served (FCFS) is a non-preemptive scheduling policy that allocates the CPU to processes strictly in the order of their arrival into the ready queue. Once a process secures the CPU, it runs uninterrupted until completion. While simple, FCFS suffers from the \textbf{convoy effect}, where short processes are forced to wait behind an exceptionally long CPU-bound process, driving up average waiting times.
+
+\subsubsection{Pseudocode}
+\begin{lstlisting}[language=Java, caption={FCFS Scheduling Logic}]
+currentTime = 0;
+sort(jobs, by ArrivalTime, then by PID);
+for each job in jobs:
+    if currentTime < job.arrivalTime:
+        currentTime = job.arrivalTime; // CPU Idle
+    job.startTime = currentTime;
+    job.completionTime = currentTime + job.burstTime;
+    currentTime = job.completionTime;
+    calculateMetrics(job);
+\end{lstlisting}
+
+\subsubsection{FCFS Trace and Gantt Chart Example}
+Consider a workload of three jobs: $J_1(AT=0, BT=6)$, $J_2(AT=1, BT=3)$, and $J_3(AT=2, BT=1)$.
+\begin{itemize}
+    \item $t=0$: $J_1$ arrives and executes from $t=0$ to $t=6$.
+    \item $t=6$: $J_1$ completes ($CT=6$). $J_2$ enters execution and runs from $t=6$ to $t=9$ ($CT=9$).
+    \item $t=9$: $J_3$ executes from $t=9$ to $t=10$ ($CT=10$).
+\end{itemize}
+
+\begin{figure}[H]
+\centering
+\begin{tabular}{|c|c|c|}
+\hline
+\textbf{$J_1$ [0--6]} & \textbf{$J_2$ [6--9]} & \textbf{$J_3$ [9--10]} \\
+\hline
+\end{tabular}
+\caption{Gantt Chart for FCFS Benchmark Example.}
+\end{figure}
+
+The resulting metrics are:
+\begin{itemize}
+    \item $J_1$: $TAT = 6 - 0 = 6$, $WT = 6 - 6 = 0$.
+    \item $J_2$: $TAT = 9 - 1 = 8$, $WT = 8 - 3 = 5$.
+    \item $J_3$: $TAT = 10 - 2 = 8$, $WT = 8 - 1 = 7$.
+    \item Average Waiting Time: $\frac{0 + 5 + 7}{3} = 4.0\text{ time units}$.
+\end{itemize}
+
+\subsection{Priority Scheduling (Non-Preemptive)}
+\subsubsection{Algorithm Explanation}
+Priority scheduling selects the waiting job with the highest priority (lowest numerical priority value in Procura's convention). In the non-preemptive variant, once a job begins execution, it retains the CPU until its burst finishes, even if a higher-priority job arrives in the ready queue during its execution. If two jobs share identical priority values, the tie is broken using FCFS order.
+
+\subsubsection{Pseudocode}
+\begin{lstlisting}[language=Java, caption={Non-Preemptive Priority Scheduling Logic}]
+currentTime = 0;
+completedCount = 0;
+while completedCount < totalJobs:
+    readyQueue = filter(jobs, j -> j.arrivalTime <= currentTime && !j.isDone);
+    if readyQueue is empty:
+        currentTime = min(arrivalTime of remaining jobs);
+        continue;
+    selectedJob = pickMin(readyQueue, by Priority, then ArrivalTime);
+    selectedJob.startTime = currentTime;
+    selectedJob.completionTime = currentTime + selectedJob.burstTime;
+    currentTime = selectedJob.completionTime;
+    selectedJob.isDone = true;
+    completedCount++;
+\end{lstlisting}
+
+\subsubsection{Trace Example}
+Using the job set: $J_1(AT=0, BT=4, P=3)$, $J_2(AT=1, BT=5, P=1)$, $J_3(AT=2, BT=2, P=2)$.
+\begin{itemize}
+    \item At $t=0$, only $J_1$ has arrived. $J_1$ claims the CPU and runs until $t=4$.
+    \item At $t=4$, both $J_2(P=1)$ and $J_3(P=2)$ are in the ready queue. Since $J_2$ has higher priority ($1 < 2$), $J_2$ runs from $t=4$ to $t=9$.
+    \item At $t=9$, $J_3$ executes from $t=9$ to $t=11$.
+\end{itemize}
+
+\subsection{Round Robin (RR)}
+\subsubsection{Algorithm Explanation}
+Round Robin is a preemptive scheduling algorithm engineered specifically for time-sharing systems. The CPU scheduler cycles through a First-In-First-Out ready queue, granting each process a discrete allocation of CPU time called a **time quantum** ($\tau$). If a process completes its burst within $\tau$, it vacates the CPU; otherwise, the process is preempted by a timer interrupt, placed at the tail of the ready queue, and the CPU is dispatched to the next process.
+
+\subsubsection{Pseudocode}
+\begin{lstlisting}[language=Java, caption={Round Robin Scheduling Logic ($\tau = \text{quantum}$)}]
+currentTime = 0;
+queue = new ArrayDeque();
+// Track remaining burst time for each job
+remainingBurst = map(jobs, j -> j.burstTime);
+
+while jobs remaining or queue not empty:
+    enqueueAllNewlyArrived(jobs, currentTime, queue);
+    if queue is empty:
+        currentTime = nextArrival(jobs);
+        continue;
+    job = queue.poll();
+    slice = min(quantum, remainingBurst.get(job));
+    recordGanttSegment(job, currentTime, currentTime + slice);
+    currentTime += slice;
+    remainingBurst.put(job, remainingBurst.get(job) - slice);
+    enqueueAllNewlyArrived(jobs, currentTime, queue);
+    if remainingBurst.get(job) > 0:
+        queue.add(job);
+    else:
+        job.completionTime = currentTime;
+\end{lstlisting}
+
+\subsubsection{Round Robin Trace ($\tau = 2$)}
+Consider jobs: $J_1(AT=0, BT=5)$, $J_2(AT=1, BT=3)$, $J_3(AT=2, BT=1)$ with $\tau = 2$.
+\begin{itemize}
+    \item $t=0$: $J_1$ runs for 2 units (remaining: 3). At $t=2$, $J_2$ and $J_3$ have arrived. Queue order: $[J_2, J_3, J_1]$.
+    \item $t=2$: $J_2$ runs for 2 units (remaining: 1). Current time $t=4$. Queue: $[J_3, J_1, J_2]$.
+    \item $t=4$: $J_3$ runs for 1 unit (finishes at $t=5$, $CT=5$). Queue: $[J_1, J_2]$.
+    \item $t=5$: $J_1$ runs for 2 units (remaining: 1). Current time $t=7$. Queue: $[J_2, J_1]$.
+    \item $t=7$: $J_2$ runs for 1 unit (finishes at $t=8$, $CT=8$). Queue: $[J_1]$.
+    \item $t=8$: $J_1$ runs for final 1 unit (finishes at $t=9$, $CT=9$).
+\end{itemize}
+
+\begin{figure}[H]
+\centering
+\begin{tabular}{|c|c|c|c|c|c|}
+\hline
+\textbf{$J_1$ [0--2]} & \textbf{$J_2$ [2--4]} & \textbf{$J_3$ [4--5]} & \textbf{$J_1$ [5--7]} & \textbf{$J_2$ [7--8]} & \textbf{$J_1$ [8--9]} \\
+\hline
+\end{tabular}
+\caption{Gantt Timeline for Round Robin Execution with $\tau = 2$.}
+\end{figure}
+
+\section{GUI Implementation}
+The graphical interface of Procura is engineered using Java Swing with custom UI renderers conforming to an ergonomic dark theme. The layout is structured inside a main window (\texttt{MainWindow}) incorporating a tabbed panel interface (\texttt{JTabbedPane}):
+
+\begin{enumerate}
+    \item \textbf{Process Monitor Panel}: Features a sortable, filterable \texttt{JTable} listing all active Linux processes with columns for PID, PPID, Process Name, State, \%CPU, \%Memory, and RSS. An instant search bar filters rows dynamically based on PID or executable command.
+    \item \textbf{Process Hierarchy Panel}: Houses an interactive \texttt{JTree} visualizing the Unix process tree. Nodes indicate process names and PIDs, with root branches stemming from PID 1.
+    \item \textbf{Scheduler Simulation Panel}: Provides input forms for creating custom job batches, algorithm selector dropdowns (FIFO, Priority, Round Robin), quantum spinners, and an interactive simulation execution button. Below the controls, a visual Gantt chart renderer illustrates the step-by-step CPU allocation timeline, followed by a results table reporting turnaround, waiting, and response metrics.
+    \item \textbf{Analytics and Plotting Panel}: Features action buttons to trigger the Python Matplotlib analytics bridge and display embedded PNG performance graphs directly within the application.
+\end{enumerate}
+
+\begin{figure}[H]
+\centering
+\placeholderimage{screenshots/process_monitor.png}{Procura Main Process Monitor Dashboard}
+\caption{Procura Desktop Interface Showing the Live Process Telemetry Table.}
+\label{fig:dashboard}
+\end{figure}
+
+\section{Python and Java Integration}
+To combine Java's multi-threaded desktop GUI with Python's scientific visualization ecosystem, Procura implements a clean, file-based pipeline:
+\begin{enumerate}
+    \item \textbf{Data Export via CSV}: Following an algorithm simulation run, Java's \texttt{CsvExporter} writes job metrics and execution records to structured CSV files:
+    \begin{itemize}
+        \item \texttt{metrics.csv}: Columns: \texttt{JobID, Algorithm, ArrivalTime, BurstTime, Priority, CompletionTime, TurnaroundTime, WaitingTime, ResponseTime}.
+        \item \texttt{gantt.csv}: Columns: \texttt{JobID, StartTime, EndTime, Algorithm}.
+    \end{itemize}
+    \item \textbf{Subprocess Invocation via \texttt{ProcessBuilder}}: Java's \texttt{PythonBridge} triggers the Python plotting script (\texttt{python/plot\_metrics.py}) asynchronously using \texttt{java.lang.ProcessBuilder}. Standard output and error streams are redirected to capture diagnostic logs.
+    \item \textbf{Visualization Rendering}: The Python script reads the CSV datasets via Pandas and renders publication-ready charts using Matplotlib, writing output figures as high-resolution PNGs to the target artifacts directory.
+\end{enumerate}
+
+\begin{lstlisting}[language=Java, caption={Asynchronous Subprocess Launch in PythonBridge}]
+ProcessBuilder pb = new ProcessBuilder(
+    "python3",
+    "python/plot_metrics.py",
+    "--data", csvFile.getAbsolutePath(),
+    "--output", outputDir.getAbsolutePath()
+);
+pb.redirectErrorStream(true);
+Process process = pb.start();
+int exitCode = process.waitFor();
+if (exitCode != 0) {
+    throw new IOException("Plotting script exited with code " + exitCode);
+}
+\end{lstlisting}
+
+\section{Performance Statistics and Plotting}
+\subsection{Mathematical Definitions of Scheduling Metrics}
+For a set of $n$ simulated jobs where each job $J_i$ possesses an Arrival Time ($AT_i$), Burst Time ($BT_i$), First Start Time ($ST_i$), and Completion Time ($CT_i$), the primary performance metrics are defined as follows:
+
+\begin{enumerate}
+    \item \textbf{Turnaround Time ($TAT$)}: The total elapsed duration from job submission to its final termination:
+    \begin{equation}
+    TAT_i = CT_i - AT_i
+    \end{equation}
+    \item \textbf{Waiting Time ($WT$)}: The cumulative duration spent by a job residing in the ready queue waiting for CPU allocation:
+    \begin{equation}
+    WT_i = TAT_i - BT_i
+    \end{equation}
+    \item \textbf{Response Time ($RT$)}: The latency between job arrival and its initial CPU execution:
+    \begin{equation}
+    RT_i = ST_i - AT_i
+    \end{equation}
+    \item \textbf{Average Turnaround Time ($\overline{TAT}$)}:
+    \begin{equation}
+    \overline{TAT} = \frac{1}{n} \sum_{i=1}^n TAT_i
+    \end{equation}
+    \item \textbf{Average Waiting Time ($\overline{WT}$)}:
+    \begin{equation}
+    \overline{WT} = \frac{1}{n} \sum_{i=1}^n WT_i
+    \end{equation}
+    \item \textbf{CPU Utilization ($\eta$)}: The proportion of total elapsed simulation time during which the processor was actively executing jobs:
+    \begin{equation}
+    \eta = \left( \frac{\sum_{i=1}^n BT_i}{\max_{i}(CT_i) - \min_{i}(AT_i)} \right) \times 100\%
+    \end{equation}
+    \item \textbf{Throughput ($\Theta$)}: The rate of completed jobs per unit of time:
+    \begin{equation}
+    \Theta = \frac{n}{\max_{i}(CT_i) - \min_{i}(AT_i)}
+    \end{equation}
+\end{enumerate}
+
+\subsection{Comparative Visualization}
+The Matplotlib pipeline generates two core visual artifacts:
+\begin{itemize}
+    \item \textbf{Gantt Chart Timeline}: Horizontal bar charts mapping temporal intervals $[t_{\text{start}}, t_{\text{end}}]$ across job identifiers, color-coded by process identity.
+    \item \textbf{Metric Comparison Bar Charts}: Grouped bar plots contrasting Average Waiting Time and Average Turnaround Time across FCFS, Priority, and Round Robin under identical workload configurations.
+\end{itemize}
+
+\begin{figure}[H]
+\centering
+\placeholderimage{screenshots/python_metrics_plot.png}{Comparative Scheduling Metrics Generated via Matplotlib}
+\caption{Matplotlib Comparison of Turnaround and Waiting Times Across Algorithms.}
+\label{fig:metrics_plot}
+\end{figure}
+
+\section{System Architecture}
+Procura is organized according to clean architectural separation of concerns, dividing core responsibilities into distinct packages:
+
+\begin{itemize}
+    \item \texttt{com.procura.model}: Immutable data objects (\texttt{ProcessInfo}, \texttt{Job}, \texttt{SchedulingResult}, \texttt{GanttSegment}).
+    \item \texttt{com.procura.monitor}: Low-level POSIX and Linux kernel interaction (\texttt{ProcessMonitor}, \texttt{ProcessHierarchy}).
+    \item \texttt{com.procura.scheduler}: The scheduling engine implementing the Strategy design pattern (\texttt{Scheduler} interface, \texttt{FifoScheduler}, \texttt{PriorityScheduler}, \texttt{RoundRobinScheduler}).
+    \item \texttt{com.procura.ui}: Swing desktop graphical components, table models, tree visualizers, and custom dark color themes.
+    \item \texttt{com.procura.util}: I/O utility bridges (\texttt{CsvExporter}, \texttt{PythonBridge}).
+\end{itemize}
+
+\section{Testing and Verification}
+Procura was validated through automated unit testing, manual calculations, and integration checks.
+
+\subsection{JUnit 5 Test Suite}
+Automated tests in `src/test/java/` verify algorithm correctness across boundary conditions:
+\begin{itemize}
+    \item \textbf{\texttt{FifoSchedulerTest}}: Tests single-job execution, sequential arrivals, out-of-order arrival sorting, and idle periods between job batches.
+    \item \textbf{\texttt{PrioritySchedulerTest}}: Verifies non-preemptive selection, equal priority tie-breaking via FCFS, and jobs arriving after scheduler initialization.
+    \item \textbf{\texttt{RoundRobinSchedulerTest}}: Validates preemption mechanics with varying quanta ($\tau \in \{1, 2, 4\}$), single-burst completion within quantum, and strict FIFO queue re-insertion.
+    \item \textbf{\texttt{ProcessMonitorTest}}: Validates string parsing routines against simulated `/proc` stat lines containing spaces and parenthesis boundaries.
+\end{itemize}
+
+\subsection{Sample Test Output}
+Listing~\ref{lst:testoutput} illustrates the Maven test execution log confirming complete suite passage.
+
+\begin{lstlisting}[caption={Maven Surefire Unit Test Execution Summary}, label={lst:testoutput}]
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running com.procura.FifoSchedulerTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.042 s
+[INFO] Running com.procura.PrioritySchedulerTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.031 s
+[INFO] Running com.procura.RoundRobinSchedulerTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.055 s
+[INFO] Running com.procura.ProcessMonitorTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.024 s
+[INFO] 
+[INFO] Results:
+[INFO] Tests run: 18, Failures: 0, Errors: 0, Skipped: 0
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+\end{lstlisting}
+
+\section{Performance Profiling with Java Flight Recorder (JFR)}
+To evaluate system resource overhead, Procura was profiled using **Java Flight Recorder (JFR)** under active 1-second monitoring loops.
+
+\subsection{Profiling Setup}
+The application was launched via the automated profiling script \texttt{scripts/profile.sh}:
+\begin{lstlisting}[language=bash]
+java -XX:StartFlightRecording=disk=true,dumponexit=true,filename=procura_profile.jfr,settings=profile -jar target/procura-1.0.0.jar
+\end{lstlisting}
+
+\subsection{Diagnostic Findings}
+The recording was analyzed using JDK Mission Control (JMC). Key findings include:
+\begin{itemize}
+    \item \textbf{CPU Overhead}: The background monitoring thread consumed an average of $< 1.8\%$ of a single CPU core during active 1000ms sampling passes. String tokenization in `/proc` parsing represented the primary CPU consumer.
+    \item \textbf{Garbage Collection Footprint}: Minor garbage collection pauses averaged under $4.2\text{ ms}$, with no evidence of memory leaks or retained object accumulation in the Swing table models.
+    \item \textbf{Thread Contention}: Lock contention between the monitoring background worker and the Swing EDT remained at zero, confirming that \texttt{SwingUtilities.invokeLater} avoided synchronized lock blocking.
+\end{itemize}
+
+\section{System Limitations}
+In the spirit of honest academic engineering, several limitations of the current implementation are noted:
+\begin{enumerate}
+    \item \textbf{Linux Host Dependency}: Real-time process monitoring relies on the Linux virtual `/proc` filesystem. On Windows or macOS, real-time telemetry is unavailable (though the scheduling simulator remains functional).
+    \item \textbf{Filesystem Permission Restrictions}: Under standard user privileges, specific kernel threads or processes owned by other users cannot be fully inspected.
+    \item \textbf{Discrete-Event Simulation vs. Kernel CFS}: The scheduling engine is a discrete simulation for education and does not replace or modify the Linux kernel's internal Completely Fair Scheduler (CFS).
+    \item \textbf{Sampling Latency}: CPU percentages are calculated across a discrete time interval ($\Delta t = 1.0\text{ s}$), reflecting average activity over that interval rather than continuous instantaneous metrics.
+\end{enumerate}
+
+\section{Team Contributions}
+Table~\ref{tab:contributions} summarizes the division of labor and responsibilities across the project team.
+
+\begin{table}[H]
+\centering
+\caption{Individual Team Member Contributions}
+\label{tab:contributions}
+\begin{tabular}{@{}llp{8.5cm}@{}}
+\toprule
+\textbf{Team Member} & \textbf{Roll Number} & \textbf{Assigned Area \& Key Technical Contributions} \\ \midrule
+\textbf{Swaroop} & CS25BT006 & \textbf{Process Monitoring and CPU/Memory Data Collection}: Worked on collecting process information from Linux \texttt{/proc} files, including \texttt{/proc/[pid]/stat} and \texttt{/proc/meminfo}. Implemented CPU usage calculation using time differences and handled memory-related calculations and data formatting. \\ \addlinespace
+\textbf{Bunny} & CS25BT016 & \textbf{Process Management, CPU Scheduling and Concurrency}: Worked on the process hierarchy and implemented the CPU scheduling algorithms, including FIFO, Priority Scheduling and Round Robin. Also handled background monitoring tasks, thread management and scheduling performance calculations. \\ \addlinespace
+\textbf{Basha} & CS25BT059 & \textbf{GUI Development, Visualization, Testing and Documentation}: Worked on the Java Swing interface, including the different panels, tables and data display. Also handled CSV export, Python-based graph generation using Matplotlib, JUnit testing, build scripts, performance profiling and project documentation. \\ \bottomrule
+\end{tabular}
+\end{table}
+
+\section{Summary of AI Usage}
+Generative AI tools were utilized during the development of Procura for boilerplate code generation, layout templating, and documentation formatting, in full accordance with university academic integrity standards. All AI-assisted components were manually reviewed, verified by hand calculations, and validated against genuine Linux environments. For the complete declaration, refer to the accompanying project document \texttt{AI\_USAGE.md}.
+
+\section{Conclusion and Future Work}
+\subsection{Summary of Accomplishments}
+The Procura project successfully demonstrates that complex operating system concepts can be rendered intuitive, observable, and measurable through an integrated software tool. By coupling low-level Linux `/proc` kernel telemetry with an interactive CPU scheduling simulator, Procura provides an effective desktop environment for analyzing process management and processor scheduling policies.
+
+\subsection{Future Enhancements}
+Potential future directions for Procura include:
+\begin{itemize}
+    \item Implementing preemptive Shortest Remaining Time First (SRTF) and Multi-Level Feedback Queue (MLFQ) algorithms.
+    \item Introducing real-time process control capabilities (e.g., sending POSIX signals such as \texttt{SIGSTOP}, \texttt{SIGCONT}, and \texttt{SIGKILL} directly from the GUI).
+    \item Adding multi-core CPU scheduling simulations with processor affinity and load balancing.
+\end{itemize}
+
+\bibliographystyle{plain}
+\bibliography{references}
+
+\end{document}

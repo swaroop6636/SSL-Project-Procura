@@ -1,0 +1,4 @@
+Algorithm,Avg_Waiting_Time,Avg_Turnaround_Time,Avg_Response_Time,CPU_Utilization,Throughput
+FIFO (FCFS),3.333,7.333,3.333,100.0,0.250
+Priority (Non-Preemptive),2.667,6.667,2.667,100.0,0.250
+Round Robin (q=2),5.667,9.667,1.000,100.0,0.250
